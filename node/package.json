@@ -1,0 +1,17 @@
+{
+  "name": "singapore-geo-testing-node",
+  "private": true,
+  "type": "module",
+  "description": "Playwright and Puppeteer recipes that check what a Singapore mobile user sees.",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test",
+    "playwright": "node playwright-check.mjs",
+    "puppeteer": "node puppeteer-check.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "puppeteer": "^24.0.0"
+  }
+}

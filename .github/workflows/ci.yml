@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Every browser run goes through fixture/fake_proxy.py, an authenticating proxy that serves a
+  # fake Singapore storefront on http://shop.test/. No secrets, no real proxy, no third-party sites.
+  python:
+    runs-on: ubuntu-latest
+    env:
+      SG_PROXY_SERVER: http://127.0.0.1:8899
+      SG_PROXY_USERNAME: ci-user
+      SG_PROXY_PASSWORD: ci-pass
+      TARGET_URL: http://shop.test/
+      EXPECT_URL: /sg/$
+      EXPECT_TEXT: 'S\$ ?[0-9]'
+      FORBID_TEXT: '€|EUR'
+      CONSENT_SELECTOR: '#consent'
+      SETTLE_MS: '300'
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pyflakes
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pyflakes . ../fixture
+      - run: python -m unittest -v test_geo_common
+      - name: Start fixture proxy
+        run: |
+          python ../fixture/fake_proxy.py 8899 > /tmp/fixture.log 2>&1 &
+          for i in $(seq 1 20); do nc -z 127.0.0.1 8899 && break; sleep 0.5; done
+      - name: Playwright (Python)
+        run: python playwright_check.py
+      - name: Selenium (via the auth forwarder)
+        run: python selenium_check.py
+      - name: Exit check
+        run: python exit_check.py
+        env:
+          IP_INFO_URL: http://ipinfo.test/json
+      - name: Negative - an EU page must fail every geo check
+        run: |
+          if TARGET_URL=http://shop.test/eu/ python playwright_check.py; then echo "should have failed"; exit 1; fi
+      - name: Negative - a wrong password must fail
+        run: |
+          if SG_PROXY_PASSWORD=wrong python selenium_check.py; then echo "should have failed"; exit 1; fi
+      - if: failure()
+        run: cat /tmp/fixture.log
+
+  node:
+    runs-on: ubuntu-latest
+    env:
+      SG_PROXY_SERVER: http://127.0.0.1:8899
+      SG_PROXY_USERNAME: ci-user
+      SG_PROXY_PASSWORD: ci-pass
+      TARGET_URL: http://shop.test/
+      EXPECT_URL: /sg/$
+      EXPECT_TEXT: 'S\$ ?[0-9]'
+      FORBID_TEXT: '€|EUR'
+      CONSENT_SELECTOR: '#consent'
+      SETTLE_MS: '300'
+    defaults:
+      run:
+        working-directory: node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: node/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Start fixture proxy
+        run: |
+          python ../fixture/fake_proxy.py 8899 > /tmp/fixture.log 2>&1 &
+          for i in $(seq 1 20); do nc -z 127.0.0.1 8899 && break; sleep 0.5; done
+      - name: Playwright (Node)
+        run: node playwright-check.mjs
+      - name: Puppeteer
+        run: node puppeteer-check.mjs
+      - name: Negative - an EU page must fail every geo check
+        run: |
+          if TARGET_URL=http://shop.test/eu/ node puppeteer-check.mjs; then echo "should have failed"; exit 1; fi
+      - if: failure()
+        run: cat /tmp/fixture.log
+
+  # Real run from a Singapore mobile IP. Skipped unless the repo has an SG_PROXY_URL secret,
+  # so forks and PRs stay green. Dependencies install BEFORE the proxy step, so pip and the
+  # browser download don't burn mobile data.
+  live:
+    runs-on: ubuntu-latest
+    needs: [python, node]
+    env:
+      SG_PROXY_URL: ${{ secrets.SG_PROXY_URL }}
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - if: env.SG_PROXY_URL == ''
+        working-directory: .
+        run: echo "No SG_PROXY_URL secret, skipping the live run."
+      - if: env.SG_PROXY_URL != ''
+        uses: actions/checkout@v4
+      - if: env.SG_PROXY_URL != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - if: env.SG_PROXY_URL != ''
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - if: env.SG_PROXY_URL != ''
+        id: sg
+        uses: Xavierfok/setup-singapore-proxy@v1
+        with:
+          proxy-url: ${{ secrets.SG_PROXY_URL }}
+      - if: env.SG_PROXY_URL != ''
+        name: Exit IP is a Singapore mobile ASN
+        run: python exit_check.py
+      - if: env.SG_PROXY_URL != ''
+        name: Browser sees loc=SG on the Cloudflare trace
+        run: python playwright_check.py

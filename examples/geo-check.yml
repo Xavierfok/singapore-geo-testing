@@ -1,0 +1,56 @@
+# Copy to .github/workflows/geo-check.yml in your own repo.
+#
+# Runs nightly and on demand: loads your storefront from a real Singapore mobile IP and fails
+# if it doesn't redirect to the SG site, show S$ prices, and skip the EU cookie banner.
+# Needs one repository secret, SG_PROXY_URL = http://user:pass@host:port.
+name: Singapore geo check
+
+on:
+  schedule:
+    - cron: '0 1 * * *' # 09:00 Singapore time
+  workflow_dispatch:
+
+jobs:
+  geo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Xavierfok/singapore-geo-testing
+          path: geo
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Install before routing through the proxy, so downloads don't use mobile data.
+      - run: |
+          pip install -r geo/python/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # Exports HTTPS_PROXY and SG_PROXY_SERVER / _USERNAME / _PASSWORD, and fails
+      # unless the exit IP is in Singapore on Singtel or M1.
+      - id: sg
+        uses: Xavierfok/setup-singapore-proxy@v1
+        with:
+          proxy-url: ${{ secrets.SG_PROXY_URL }}
+
+      - name: Storefront looks Singaporean
+        working-directory: geo/python
+        env:
+          TARGET_URL: https://shop.example.com/            # your site
+          EXPECT_URL: /sg(/|$)                             # ended up on the SG storefront
+          EXPECT_TEXT: 'S\$ ?[0-9]'                        # prices in Singapore dollars
+          FORBID_TEXT: 'US\$|€'                            # and not in another currency
+          CONSENT_SELECTOR: '#onetrust-banner-sdk'         # EU-only cookie banner stays hidden
+          SCREENSHOT: sg.png
+        run: python playwright_check.py
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sg-screenshot
+          path: geo/python/sg.png
+          if-no-files-found: ignore
+
+      - run: echo "Checked from ${{ steps.sg.outputs.ip }} (${{ steps.sg.outputs.carrier }}, ${{ steps.sg.outputs.asn }})"
