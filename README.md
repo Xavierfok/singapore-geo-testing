@@ -119,6 +119,9 @@ an EU page and a wrong password both fail. No secrets or third-party sites neede
   [`geo_common.py`](python/geo_common.py)). Playwright and Puppeteer handle it natively.
 - **SOCKS with a password doesn't work in Chrome** in any framework. Use the proxy's HTTP port, or
   IP whitelisting.
+- **Puppeteer on Ubuntu 24.04 runners** fails with "No usable sandbox!" because AppArmor blocks
+  unprivileged user namespaces. Add `echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns`
+  before it runs (this repo's CI does). Playwright's Chromium isn't affected.
 - **Google results aren't included.** Google's terms don't allow automated queries, so there's no
   recipe that scrapes a results page.
 - **App Store region follows the Apple ID, not the IP.** The web preview at `apps.apple.com` doesn't
