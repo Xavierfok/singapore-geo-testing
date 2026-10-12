@@ -97,7 +97,8 @@ real local visitor. Every recipe sets the timezone to `Asia/Singapore`, the loca
 (on https pages) a Singapore geolocation, and the `browser_timezone` check confirms it took.
 
 `exit_check.py` is the other half. It tells you whether the exit IP is on a Singapore **mobile**
-network or just a Singapore IP. Mobile ASNs it knows: Singtel AS45143, M1 AS4773, StarHub AS9874.
+network or just a Singapore IP. Mobile ASNs it knows: Singtel AS45143, M1 AS4773, StarHub AS138345
+(and StarHub's older AS9874, which no longer announces any prefixes).
 Home fibre and datacenter IPs are Singaporean but not mobile, and it says so.
 
 ## In CI
