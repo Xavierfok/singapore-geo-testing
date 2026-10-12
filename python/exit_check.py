@@ -20,7 +20,8 @@ ASNS = {
     7473: ("singtel", False),   # SINGTEL-AS-AP
     4773: ("m1", True),         # MOBILEONELTD-AS-AP
     17547: ("m1", False),       # M1NET-SG-AP
-    9874: ("starhub", True),    # STARHUB-MOBILE
+    138345: ("starhub", True),  # STARHUB-MOBILE2: announces StarHub's mobile prefixes
+    9874: ("starhub", True),    # STARHUB-MOBILE: older, announces no prefixes; kept for stale IP data
     4657: ("starhub", False),   # StarHub Internet
     55430: ("starhub", False),  # StarHub NGNBN
 }
